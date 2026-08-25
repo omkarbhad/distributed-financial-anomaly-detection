@@ -1,0 +1,164 @@
+# Distributed Financial Anomaly Detection
+
+[![CI](https://github.com/omkarbhad/distributed-financial-anomaly-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/omkarbhad/distributed-financial-anomaly-detection/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+An end-to-end portfolio project for detecting unusual financial transactions at local and distributed scale. It combines behavioral feature engineering, unsupervised anomaly detection, a PySpark batch pipeline, a FastAPI scoring service, and a Streamlit monitoring dashboard.
+
+**Project period:** April 2026 – May 2026  
+**Author:** [Omkar Bhad](https://www.linkedin.com/in/omkar-bhad-data-scientist/)
+
+> This repository uses generated transactions for demonstration. Its predictions are educational and must not be treated as financial or fraud-investigation decisions.
+
+## What it demonstrates
+
+- Reproducible synthetic transaction generation with injected anomalies
+- Customer-level behavioral features and transaction risk signals
+- Isolation Forest detection for a lightweight local workflow
+- Distributed feature engineering and K-Means distance scoring with PySpark
+- REST scoring through FastAPI and interactive monitoring with Streamlit
+- Automated tests, linting, Docker packaging, and GitHub Actions CI
+
+## Architecture
+
+```text
+Transaction data
+      |
+      +--> Local demo: pandas --> feature pipeline --> Isolation Forest
+      |                                           |--> model + scored CSV
+      |
+      +--> Distributed: Spark DataFrame --> window features --> scaled vectors
+                                                          |--> K-Means distance
+                                                                   |--> Parquet
+
+Model artifact --> FastAPI scoring service
+Scored results --> Streamlit monitoring dashboard
+```
+
+## Quick start
+
+```bash
+git clone https://github.com/omkarbhad/distributed-financial-anomaly-detection.git
+cd distributed-financial-anomaly-detection
+python -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev,dashboard]'
+make demo
+make test
+```
+
+The demo creates:
+
+- `data/generated/transactions.csv`
+- `artifacts/isolation_forest.joblib`
+- `artifacts/scored_transactions.csv`
+
+Launch the monitoring UI:
+
+```bash
+make dashboard
+```
+
+Open `http://localhost:8501`.
+
+## API
+
+After `make demo`, start the service:
+
+```bash
+make api
+```
+
+Health check:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Score a transaction:
+
+```bash
+curl -X POST http://localhost:8000/score \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "transaction_id": "txn_demo_001",
+    "customer_id": 101,
+    "timestamp": "2026-05-15T02:14:00Z",
+    "amount": 9400.00,
+    "channel": "wire",
+    "merchant_category": "services",
+    "country_risk": 0.91,
+    "account_age_days": 4
+  }'
+```
+
+Interactive API documentation is available at `http://localhost:8000/docs`.
+
+## Distributed Spark job
+
+Install the Spark extra and create sample data:
+
+```bash
+pip install -e '.[spark]'
+make demo
+make spark
+```
+
+The Spark workflow partitions transaction computation across workers, builds customer-window features, standardizes vectors, fits MLlib K-Means, and flags the highest-distance observations. Results are written as Parquet to `artifacts/spark_scores`.
+
+For a standalone cluster, submit with your Spark master:
+
+```bash
+spark-submit \
+  --master spark://your-spark-master:7077 \
+  src/financial_anomaly/spark_job.py \
+  --input s3a://your-bucket/transactions/ \
+  --output s3a://your-bucket/anomaly-scores/
+```
+
+## Repository layout
+
+```text
+.
+├── .github/workflows/ci.yml      # lint and test automation
+├── src/financial_anomaly/
+│   ├── api.py                    # FastAPI scoring endpoint
+│   ├── dashboard.py              # Streamlit monitoring UI
+│   ├── data.py                   # reproducible synthetic generator
+│   ├── features.py               # behavioral feature engineering
+│   ├── model.py                  # local Isolation Forest model
+│   ├── pipeline.py               # local end-to-end workflow
+│   └── spark_job.py              # distributed Spark workflow
+├── tests/                        # unit tests
+├── Dockerfile
+├── docker-compose.yml
+├── Makefile
+└── pyproject.toml
+```
+
+## Design choices
+
+**Why two detection paths?** The local pipeline makes the project quick to review and reproduce. The Spark workflow shows how the same problem can be handled when data exceeds a single machine.
+
+**Why unsupervised learning?** Real anomaly labels are scarce and delayed. Isolation Forest and cluster-distance scoring provide useful baselines without requiring labeled fraud data.
+
+**Why generated data?** It makes the repository safe to share and fully reproducible. Replace the generator with a governed transaction source for a production adaptation.
+
+## Customize it
+
+- Adjust anomaly patterns in `src/financial_anomaly/data.py`
+- Add business signals to `src/financial_anomaly/features.py`
+- Swap the detector in `src/financial_anomaly/model.py`
+- Change the distributed threshold with `--anomaly-fraction`
+- Connect the Spark job to S3, Kafka, Delta Lake, or a warehouse
+- Add MLflow tracking and model drift monitoring as a next iteration
+
+## Responsible use
+
+An anomaly flag is a review signal, not proof of fraud. A production deployment should include human review, threshold validation, bias testing, audit logs, access controls, encryption, and monitoring for drift and false positives.
+
+## License
+
+Released under the [MIT License](LICENSE).
+
